@@ -196,7 +196,7 @@ class RequestAuthenticatorSpec extends AuthenticatorSpec {
         .unsafeRunSync() mustBe Status.Unauthorized
     }
 
-    it should "allow messages service to GET" in {
+    it should "allow fallthrough to gettingService" in {
       val response: OptionT[IO, Response[IO]] = for {
           auth <- requestAuth.authenticator.create(dummyBob.id)
           embedded = authSpec.embedInRequest(Request[IO](uri = Uri.unsafeFromString("/api")), auth)
