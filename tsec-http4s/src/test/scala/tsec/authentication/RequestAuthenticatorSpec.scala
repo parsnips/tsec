@@ -2,6 +2,7 @@ package tsec.authentication
 
 import cats.data.OptionT
 import cats.effect.IO
+import cats.effect.implicits._
 import io.circe.Json
 import org.http4s.dsl.io._
 import org.http4s.circe._
@@ -30,18 +31,38 @@ class RequestAuthenticatorSpec extends AuthenticatorSpec {
 
     val testService: HttpService[IO] = requestAuth {
       case request @ GET -> Root / "api" asAuthed hi =>
-        Ok(hi.asJson)
+          Ok(hi.asJson)
+
     }
 
     val adminService: HttpService[IO] = requestAuth.authorized(onlyAdmins) {
       case request @ GET -> Root / "api" asAuthed hi =>
-        Ok(hi.asJson)
+          Ok(hi.asJson)
     }
 
     val everyoneService: HttpService[IO] = requestAuth.authorized(everyone) {
       case request @ GET -> Root / "api" asAuthed hi =>
         Ok(hi.asJson)
+      }
+
+
+    // Only admins can post
+    val postingService: HttpService[IO] = requestAuth.authorized(onlyAdmins) {
+      case request @ POST -> Root / "api" asAuthed hi =>
+          Ok(hi.asJson)
+     }
+
+    // Everyone can view
+    val gettingService: HttpService[IO] = requestAuth.authorized(everyone) {
+      case request @ GET -> Root / "api" asAuthed hi =>
+          Ok(hi.asJson)
+      }
+
+    // Composed
+    val postingAndGettingService = {
+      postingService <+> gettingService
     }
+
 
     it should "TryExtractRaw properly" in {
 
@@ -173,6 +194,20 @@ class RequestAuthenticatorSpec extends AuthenticatorSpec {
         .getOrElse(Response.notFound)
         .map(_.status)
         .unsafeRunSync() mustBe Status.Unauthorized
+    }
+
+    it should "allow messages service to GET" in {
+      val response: OptionT[IO, Response[IO]] = for {
+          auth <- requestAuth.authenticator.create(dummyBob.id)
+          embedded = authSpec.embedInRequest(Request[IO](uri = Uri.unsafeFromString("/api")), auth)
+          res <- postingAndGettingService(embedded)
+        } yield res
+
+      response
+        .getOrElse(Response.notFound)
+        .map(_.status)
+        .unsafeRunSync() mustBe Status.Ok
+
     }
   }
 
